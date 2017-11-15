@@ -7,7 +7,8 @@
 
   "applications": {
     "gecko": {
-      "id": "HideImagesPerTab@FocusZilla.github.io"
+      "id": "HideImagesPerTab@FocusZilla.github.io",
+      "strict_min_version": "57.0a1"
     }
   },
   
