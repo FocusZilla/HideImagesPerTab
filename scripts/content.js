@@ -1,0 +1,2 @@
+// access document
+"use strict";

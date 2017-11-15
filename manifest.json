@@ -1,0 +1,40 @@
+{
+
+  "manifest_version": 2,
+  "name": "Tab Toggle (show/hide) Images, Plugins and Videos",
+  "homepage_url": "https://github.com/mdn/webextensions-examples/tree/master/bookmark-it",
+  "version": "0.0",
+
+  "applications": {
+    "gecko": {
+      "id": "tab-toggle-hide-images-video@peter.kehl"
+    }
+  },
+  
+"description": "Hide/show images, plugins and videos.",
+
+"browser_action": {
+    "browser_style": true,
+    "default_icon": "buttons/button.svg",
+    "default_title": "Hide/show images, plugins/videos. New tabs.",
+    "default_popup": "popup.html?type=default"
+},
+
+"page_action": {
+  "browser_style": true,
+  "default_icon": "buttons/button.svg",
+  "default_title": "Hide/show images, plugins/videos. Current tab.",
+  "default_popup": "popup.html?type=tab"
+},
+
+"background": {
+  "scripts": ["scripts/background.js"]
+},
+
+"permissions": [
+  "tabs",
+  "storage",
+  "<all_urls>"
+]
+
+}

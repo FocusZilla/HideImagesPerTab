@@ -1,0 +1,7 @@
+/* https://www.sitepoint.com/five-ways-to-hide-elements-in-css/ */
+img {
+    display: none !important;
+}
+* {
+     background-image: none !important;
+}
