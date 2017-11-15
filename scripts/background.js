@@ -1,8 +1,11 @@
 "use strict";
-
+console.error('background.js');
+debugger;
 /** When opening a new tab with a URL (or switching to a tab from the past before this add-on was installed).
 */
 browser.tabs.onActivated.addListener( activationInfo => {
+    // pageActions are hidden by default; let's show it (even while its URL is about:blank, so that the user can choose the button before she types the URL).
+    browser.tabs.get(activationInfo.tabId).then( tab=>browser.pageAction.show(activationInfo.tabId) );
     browser.tabs.get(activationInfo.tabId).then( tab=>apply(tab) ).then( resultIgnored=>{
         //@TODO show per-tab button ('action')
     });
@@ -15,7 +18,7 @@ const SUPPORTED_SCHEMES= /(http(s)?|file|ftp):/;
 
 // Apply the tab's current setting, or apply & save current default setting to this tab.
 // Only if the tab has a URL.
-function apply( tab ) {
+function apply( tab ) {return; //TODO key
     if( tab.url && SUPPORTED_SCHEMES.test(tab.url) ) {
         
         browser.sessions.getTabValue( tab.id, key ).then( tabSetting=>{
@@ -82,7 +85,7 @@ function setButton( showImages, showVideos, tabID ) {
     buttonTitle+= tabID ? "Current tab." : "New tabs.";
     
     if( tabID!==undefined ) {
-        return Promise.all(
+        return Promise.all([
             browser.pageAction.setTitle({
                 title: buttonTitle,
                 tabId: tabID
@@ -91,17 +94,17 @@ function setButton( showImages, showVideos, tabID ) {
                 path: buttonPath,
                 tabId: tabID
             })
-        );
+        ]);
     }
     else {
-        return Promise.all(
+        return Promise.all([
             browser.browserAction.setBadgeText({
                 text: buttonTitle
             } ),
             browser.browserAction.setIcon({
                 path: buttonPath
             } )
-        );
+        ]);
     }
 }
 

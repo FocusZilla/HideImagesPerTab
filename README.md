@@ -1,3 +1,5 @@
+Temporary user documentation: Similar to https://addons.mozilla.org/en-US/firefox/addon/tab-permissions (which is for old Firefox only).
+
 manifest
 "icons": {
   "48": "icons/bookmark-it.png",
