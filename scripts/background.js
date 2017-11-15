@@ -1,24 +1,76 @@
 "use strict";
 console.error('background.js');
 debugger;
-/** When opening a new tab with a URL (or switching to a tab from the past before this add-on was installed).
-*/
-browser.tabs.onActivated.addListener( activationInfo => {
+
+browser.tabs.onCreated.addListener( tab => {//@TODO Could this be an async closure with easier syntax?
     // pageActions are hidden by default; let's show it (even while its URL is about:blank, so that the user can choose the button before she types the URL).
-    browser.tabs.get(activationInfo.tabId).then( tab=>browser.pageAction.show(activationInfo.tabId) );
-    browser.tabs.get(activationInfo.tabId).then( tab=>apply(tab) ).then( resultIgnored=>{
-        //@TODO show per-tab button ('action')
+    //@TODO test whether the result of show() is a Promise. If so, document at MDN.
+    // TODO yield
+    browser.pageAction.show(tab.id).then( resultIgnored=> {
+        onTabCreatedOrActivated( tab.id, false );
     });
 });
+
+/** When opening a new tab with a URL (or switching to a tab from the past before this add-on was installed).
+*/
+browser.tabs.onActivated.addListener( info => onTabCreatedOrActivated(info.tabId, true) );
+
+//@TODO similar for onDefaultButton
+async function onTabCreatedOrActivated( tabID, applyCSS ) {
+    var tabShowImagesOld= await getSetting( true, tabID );
+    var tabWasRestored= tabShowImagesOld!==undefined;
+    
+    var defaultButton= {
+        showImages: await getSetting(false),
+        showVideos: await getSetting(false)
+    };
+    var tabButton= tabWasRestored
+    ? {
+        showImages: tabShowImagesOld,
+        showVideos: await getSetting(false, tabID)
+    }
+    : defaultButton;
+    
+    var tabSetting= tabWasRestored
+        ? defaultButton
+        : undefined;
+    
+    return apply(tab);
+}
     
 browser.tabs.onUpdated.addListener( (tabId, changeInfo, tab) => apply(tab) );
 
 const SUPPORTED_SCHEMES= /(http(s)?|file|ftp):/;
-// @TODO button clicked - per browser or per tab
 
-// Apply the tab's current setting, or apply & save current default setting to this tab.
-// Only if the tab has a URL.
-function apply( tab ) {return; //TODO key
+/** @param defaultButton {showImages: boolean, showVideos: boolean} or undefined (whole) if no change. The new setting for default button (a.k.a. "browser action" button).
+    @param defaultButton {showImages: boolean, showVideos: boolean} or undefined (whole) if no change. The new setting for tab-specific button (a.k.a. "page action" button).
+    @param insertCSSforImages boolean|undefined Whether to inject or remove CSS that hides images
+    @param tabID number Optional; only used (and needed) if tabButton/tabSetting/insertCSSforImages/insertCSSforVideos are set.
+*/
+function apply( defaultButton, tabButton, defaultSetting, tabSetting, insertCSSforImages, insertCSSforVideos, tabID ) {
+    // If you change this, also update ../README.md
+    // Ignoring promise results. TODO log/async
+    if( defaultButton ) {
+        setButton( defaultButton.showImages, defaultButton.showVideos );
+    }
+    if( tabButton ) {
+        if( tabID===undefined ) {
+            throw "tabButton set to {" +tabButton.showImages+"," +tabButton.showVideos+ "} but tabID is undefined!";
+        }
+        setButton( tabButton.showImages, tabButton.showVideos, tabID );
+    }
+    if( defaultSetting ) {
+        setSetting( /*forImages:*/true,  undefined, defaultSetting.showImages );
+        setSetting( /*forImages:*/false, undefined, defaultSetting.showVideos );
+    }
+    if( tabSetting ) {
+        if( tabID===undefined ) {
+            throw "tabSetting set to {" +tabSetting.showImages+"," +tabSetting.showVideos+ "} but tabID is undefined!";
+        }
+        setSetting( /*forImages:*/true,  tabID, tabSetting.showImages );
+        setSetting( /*forImages:*/false, tabID, tabSetting.showVideos );
+    }
+    throw "TODO";
     if( tab.url && SUPPORTED_SCHEMES.test(tab.url) ) {
         
         browser.sessions.getTabValue( tab.id, key ).then( tabSetting=>{
@@ -110,11 +162,10 @@ function setButton( showImages, showVideos, tabID ) {
 
 //'/styles/hide-images.css'
 
-/** Add/remove CSS file. Call it only when it can do its job - i.e. add/remove - i.e. not twice with the same extFilePath and doRemoveCSS.
+/** Add/remove CSS file.
     @param {string} extFilePath Absolute path within the extension.
 */
-function insertRemoveCSS( forImages, doRemoveCSS, tabID ) {
-    doRemoveCSS= doRemoveCSS || false;
+function insertRemoveCSS( forImages, doInsertCSS, tabID ) {
     var extFilePath= forImages
         ? '/styles/hide-images.css'
         : '/styles/hide-videos.css';
@@ -122,12 +173,13 @@ function insertRemoveCSS( forImages, doRemoveCSS, tabID ) {
         allFrames: true,
         file: extFilePath
     };
-    if( !doRemoveCSS ) {
+    if( doInsertCSS ) {
         details.cssOrigin= 'user';//not used by removeCSS()
-        browser.tabs.insertCSS( tabId, details );
+        details.runAt= 'document_start';
+        return browser.tabs.insertCSS( tabId, details );
     }
     else {
-        browser.tabs.removeCSS( tabId, details );
+        return browser.tabs.removeCSS( tabId, details );
     }
 }
 
