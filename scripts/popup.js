@@ -15,6 +15,9 @@ window.onload= () => {
         hide_images_show_videos: new Choice(true, false),
         hide_images_hide_videos: new Choice(true, true)
     };
+    for( let ID in buttonIDsToChoices ) {
+        console.error( ID );
+    }
 };
 var perTab= location.href.indexOf("type=tab")>0;
 

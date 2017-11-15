@@ -37,39 +37,71 @@ function apply( tab ) {
     }
 }
 
-function defaultVisibility() {
-    browser.storage.sync.get(key).then( alreadyStoredValues => {
-        alreadyStoredValues[key]
-    });
-                        
+function getSettingName( forImages ) {
+    return forImages ? "images" : "videos";
+}
+
+/** @param tabID Of the current tab (if you want setting for the current tab). If undefined, it's for default setting, not for the current tab.
+    @return Promise resolving to the actual value (rather than to a key/values object). Resolving to undefined, if the setting wasn't set yet.
+*/
+function getSetting( forImages, tabID ) {
+    var settingName= getSettingName(forImages);
+    if( tabID!==undefined ) {
+        return browser.sessions.getTabValue( tabID, settingName );
+    }
+    else {
+        return browser.storage.local.get(settingName).then( retrievedValues =>
+            settingName in retrievedValues
+                ? retrievedValues[settingName]
+                : undefined
+        );
+    }
+}
+
+function setSetting( forImages, tabID, value ) {
+    var settingName= getSettingName(forImages);
+    if( tabID!==undefined ) {
+        return browser.sessions.setTabValue( tabID, settingName, value );
+    }
+    else {
+        var keys= {};
+        keys[settingName]= value;
+        return browser.storage.local.set(keys);
+    }
 }
 
 /** @param tabID Pass as undefined only when modifying the "page action" button. Otherwise this modifies "browser action" button (across all tabs). */
-function setIconAndLabel( showImages, showVideos, tabID ) {
+function setButton( showImages, showVideos, tabID ) {
     showImages= showImages || false;
     showVideos= showVideos || false;
     var buttonPath= "buttons/" +(showImages ? "show" : "hide")+"_images_"
         +(showVideos ? "show" : "hide")+"_videos.svg";
+        
     var buttonTitle= (showImages ? "Show" : "Hide")+" images. "
         +(showVideos ? "Show" : "Hide")+" plugins/videos. ";
     buttonTitle+= tabID ? "Current tab." : "New tabs.";
-    if( tabID ) {
-        browser.pageAction.setTitle({
-            title: buttonTitle,
-            tabId: tabID
-        });
-        browser.pageAction.setIcon({
-            tabId: tabID,
-            path: buttonPath
-        } );
+    
+    if( tabID!==undefined ) {
+        return Promise.all(
+            browser.pageAction.setTitle({
+                title: buttonTitle,
+                tabId: tabID
+            }),
+            browser.pageAction.setIcon({
+                path: buttonPath,
+                tabId: tabID
+            })
+        );
     }
     else {
-        browser.browserAction.setBadgeText({
-            text: buttonTitle
-        } );
-        browser.browserAction.setIcon({
-            path: buttonPath
-        } );
+        return Promise.all(
+            browser.browserAction.setBadgeText({
+                text: buttonTitle
+            } ),
+            browser.browserAction.setIcon({
+                path: buttonPath
+            } )
+        );
     }
 }
 
@@ -78,16 +110,15 @@ function setIconAndLabel( showImages, showVideos, tabID ) {
 /** Add/remove CSS file. Call it only when it can do its job - i.e. add/remove - i.e. not twice with the same extFilePath and doRemoveCSS.
     @param {string} extFilePath Absolute path within the extension.
 */
-function insertRemoveCSS( extFilePath, doRemoveCSS, tab ) {
+function insertRemoveCSS( forImages, doRemoveCSS, tabID ) {
     doRemoveCSS= doRemoveCSS || false;
+    var extFilePath= forImages
+        ? '/styles/hide-images.css'
+        : '/styles/hide-videos.css';
     var details= {
-     allFrames: true,
-     file: extFilePath
+        allFrames: true,
+        file: extFilePath
     };
-    var tabId= tab
-        ? tab.id
-        : undefined;
-        //->sessions API
     if( !doRemoveCSS ) {
         details.cssOrigin= 'user';//not used by removeCSS()
         browser.tabs.insertCSS( tabId, details );
