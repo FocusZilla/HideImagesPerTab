@@ -20,5 +20,5 @@ var perTab= location.href.indexOf("type=tab")>0;
 document.addEventListener("click", (e) => {
   var tuple= buttonIDsToTuples[e.target.id];
   onButtonClicked( perTab, tuple );
-  //alert( e.target.id/*classList.contains("beast")*/);
+  //alert( e.target.id );
  } );

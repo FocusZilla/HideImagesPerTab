@@ -1,21 +1,34 @@
 "use strict";
 
+browser.runtime.onInstalled.addListener( async function() {
+    var allTabs= await browser.tabs.query({});
+    for( let tab of allTabs ) {
+        browser.pageAction.show(tab.id);
+    }
+});
+
 browser.tabs.onCreated.addListener( async function(tab) {
     // pageActions are hidden by default; let's show it (even while its URL is about:blank, so that the user can choose the button before she types the URL).
     await browser.pageAction.show(tab.id);
     await onTabCreatedOrActivated( tab.id, false );
 });
 
+/** Object { tabID => true}. This serves to handle tabs.onActivated only once per tab (on the first such even per tab), rather than everytime the user switches to the tab.
+*/
+var onActivatedHandled= {};
+
 /** When opening a new tab with a URL (or switching to a tab from the past before this add-on was installed).
 */
-browser.tabs.onActivated.addListener( info =>
-    onTabCreatedOrActivated(info.tabId, true)
-);
+browser.tabs.onActivated.addListener( async function(info) {
+    if( !(info.tabId in onActivatedHandled) ) {
+        var tab= await browser.tabs.get( info.tabId );
+        onTabCreatedOrActivated(tab, true);
+        onActivatedHandled[info.tabId]= true;
+    }
+});
 
-//@TODO similar for onDefaultButton
-//@TODO onActivated only once - not everytime the user switches to the tab. Hence, keep a global object { tabID => true}.
-async function onTabCreatedOrActivated( tabID, applyCSS ) {
-    var tabShowImagesOld= await getSetting( true, tabID );
+async function onTabCreatedOrActivated( tab, applyCSS ) {
+    var tabShowImagesOld= await getSetting( true, tab.id );
     var tabWasRestored= tabShowImagesOld!==undefined;
     
     var defaultButton= {
@@ -25,7 +38,7 @@ async function onTabCreatedOrActivated( tabID, applyCSS ) {
     var tabButton= tabWasRestored
     ? {
         showImages: tabShowImagesOld,
-        showVideos: await getSetting(false, tabID)
+        showVideos: await getSetting(false, tab.id)
     }
     : defaultButton;
     
@@ -39,30 +52,26 @@ async function onTabCreatedOrActivated( tabID, applyCSS ) {
         insertCSSforVideos= tabButton.showVideos;
     }
     
-    return apply( defaultButton, tabButton, /*defaultSetting:*/undefined, tabSetting, insertCSSforImages, insertCSSforVideos, tabID );
+    return apply( defaultButton, tabButton, /*defaultSetting:*/undefined, tabSetting, insertCSSforImages, insertCSSforVideos, tab );
 }
     
 browser.tabs.onUpdated.addListener( async function(tabID, changeInfo, tab) {
-    return apply( /*defaultButton:*/undefined, /*tabButton:*/undefined, /*defaultSetting:*/undefined, /*tabSetting:*/undefined, !await getSetting(true, tabID), !await getSetting(false, tabID), tabID );
+    await browser.pageAction.show(tab.id);
+    return apply( /*defaultButton:*/undefined, /*tabButton:*/undefined, /*defaultSetting:*/undefined, /*tabSetting:*/undefined, !await getSetting(true, tabID), !await getSetting(false, tab.id), tab );
 });
 
 /** @param boolean choicePerTab Whether per tab, or for default setting. No need to pass tab ID.
     @param Tuple Selected choice.
 */
 async function onButtonClicked( choicePerTab, choice ) {
-    var applyTabButtonAndSetting= choicePerTab || tab.url==='about:blank';
-    var tabID;
-    if( applyTabButtonAndSetting ) {
-        // Can't use browser.tabs.getCurrent();
-        //@TODO how to throw & log?
-        var tabs= await browser.tabs.query( {active: true} );// currentWindow: true
-        if( tabs.length===1) {
-            tabID= tabs[0].id;
-        }
-        else {
-            console.error( "Current tab(s): " +tabs.length);
-        }
+    // Can't use browser.tabs.getCurrent();
+    //@TODO how to throw & log?
+    var tabs= await browser.tabs.query( {active: true, currentWindow: true} );
+    var tab;
+    if( tabs.length===1) {
+        tab= tabs[0];
     }
+    var applyTabButtonAndSetting= choicePerTab || tab && tab.url==='about:blank';
     
     var defaultButtonAndSetting= !perTab
         ? choice
@@ -76,7 +85,7 @@ async function onButtonClicked( choicePerTab, choice ) {
     var insertCSSforVideos= applyTabButtonAndSetting
         ? !choice.showVideos
         : undefined;
-    return apply( defaultButtonAndSetting, tabButtonAndSetting, defaultButtonAndSetting, tabButtonAndSetting, insertCSSforImages, insertCSSforVideos, tabID );
+    return apply( defaultButtonAndSetting, tabButtonAndSetting, defaultButtonAndSetting, tabButtonAndSetting, insertCSSforImages, insertCSSforVideos, tab );
 }
 
 /*async function getTabSettings( tabID ) {
@@ -88,51 +97,41 @@ const SUPPORTED_SCHEMES= /(http(s)?|file|ftp):/;
 /** @param defaultButton {showImages: boolean, showVideos: boolean} or undefined (whole) if no change. The new setting for default button (a.k.a. "browser action" button).
     @param defaultButton {showImages: boolean, showVideos: boolean} or undefined (whole) if no change. The new setting for tab-specific button (a.k.a. "page action" button).
     @param insertCSSforImages boolean|undefined Whether to inject or remove CSS that hides images
-    @param tabID number Optional; only used (and needed) if tabButton/tabSetting/insertCSSforImages/insertCSSforVideos are set.
+    @param tab tabs.Tab Optional; only used (and needed) if tabButton/tabSetting/insertCSSforImages/insertCSSforVideos are set.
 */
-function apply( defaultButton, tabButton, defaultSetting, tabSetting, insertCSSforImages, insertCSSforVideos, tabID ) {
+function apply( defaultButton, tabButton, defaultSetting, tabSetting, insertCSSforImages, insertCSSforVideos, tab ) {
     // If you change this, also update ../README.md
     // Ignoring promise results. TODO log/async
     if( defaultButton ) {
         setButton( defaultButton.showImages, defaultButton.showVideos );
     }
     if( tabButton ) {
-        if( tabID===undefined ) {
-            throw "tabButton set to {" +tabButton.showImages+"," +tabButton.showVideos+ "} but tabID is undefined!";
+        if( !tab ) {
+            throw "tabButton set to {" +tabButton.showImages+"," +tabButton.showVideos+ "} but tab is undefined!";
         }
-        setButton( tabButton.showImages, tabButton.showVideos, tabID );
+        setButton( tabButton.showImages, tabButton.showVideos, tab.id );
         }
     if( defaultSetting ) {
         setSetting( /*forImages:*/true,  undefined, defaultSetting.showImages );
         setSetting( /*forImages:*/false, undefined, defaultSetting.showVideos );
     }
     if( tabSetting ) {
-        if( tabID===undefined ) {
-            throw "tabSetting set to {" +tabSetting.showImages+"," +tabSetting.showVideos+ "} but tabID is undefined!";
+        if( !tab ) {
+            throw "tabSetting set to {" +tabSetting.showImages+"," +tabSetting.showVideos+ "} but tab is undefined!";
         }
-        setSetting( /*forImages:*/true,  tabID, tabSetting.showImages );
-        setSetting( /*forImages:*/false, tabID, tabSetting.showVideos );
+        setSetting( /*forImages:*/true,  tab.id, tabSetting.showImages );
+        setSetting( /*forImages:*/false, tab.id, tabSetting.showVideos );
     }
-    return;
-    throw "TODO";
-    if( tab.url && SUPPORTED_SCHEMES.test(tab.url) ) {
-        
-        browser.sessions.getTabValue( tab.id, key ).then( tabSetting=>{
-            if( tabSetting!==undefined ) {
-                
-            }
-            else {
-                
-            }
-            if( browser.sessions.setTabValue() ) {
-                
-            }
-            browser.sessions.setTabValue( tab.id, key, value );
-            insertRemoveCSS( '/styles/hide-images.css' );
-        });
-    }
-    else {
-        return Promise.resolve(false);
+    if( tab.url && SUPPORTED_SCHEMES.test(tab.url) ) {//unsure about about:blank
+        if( (insertCSSforImages!==undefined || insertCSSforVideos!==undefined) && tab===undefined ) {
+            throw "insertCSSforImages set to " +insertCSSforImages+", insertCSSforImages set to " +insertCSSforImages+ ", but tab is undefined!";
+        }
+        if( insertCSSforImages!==undefined ) {
+            insertRemoveCSS( '/styles/hide-images.css', insertCSSforImages, tab.id );
+        }
+        if( insertCSSforVideos!==undefined ) {
+            insertRemoveCSS( '/styles/hide-videos.css', insertCSSforVideos, tab.id );
+        }
     }
 }
 
@@ -155,12 +154,15 @@ async function getSetting( forImages, tabID ) {
     var settingName= getSettingName(forImages);
     if( tabID!==undefined ) {
         var wrapper= await browser.sessions.getTabValue( tabID, settingName );
-        if( wrapper!==undefined && !('value' in wrapper) ) {
-            console.error("WRAPPER " +wrapper+ " doesn't contain .value. Obj: " +objectInfo(wrapper) );
+        if( wrapper!==undefined ) {
+            if('value' in wrapper) {
+                return wrapper.value;
+            }
+            else {
+                console.error("WRAPPER " +wrapper+ " doesn't contain .value. Obj: " +objectInfo(wrapper)+ ". This may happen when debugging this extension via 'web-ext run'. If it happened in another situation, report this, please." );
+            }
         }
-        return wrapper!==undefined
-            ? wrapper.value
-            : undefined;
+        return undefined;
     }
     else {
         var retrievedValues= await browser.storage.local.get(settingName);
@@ -194,8 +196,6 @@ function setButton( showImages, showVideos, tabID ) {
         +(showVideos ? "Show" : "Hide")+" plugins/videos. ";
     buttonTitle+= tabID ? "Current tab." : "New tabs.";
     if( tabID!==undefined ) {
-        try {throw new Error();}
-        catch(e) {console.error(e.stack); }
         return Promise.all([
             browser.pageAction.setTitle({
                 title: buttonTitle,
@@ -235,15 +235,9 @@ function insertRemoveCSS( forImages, doInsertCSS, tabID ) {
     if( doInsertCSS ) {
         details.cssOrigin= 'user';//not used by removeCSS()
         details.runAt= 'document_start';
-        return browser.tabs.insertCSS( tabId, details );
+        return browser.tabs.insertCSS( tabID, details );
     }
     else {
-        return browser.tabs.removeCSS( tabId, details );
+        return browser.tabs.removeCSS( tabID, details );
     }
 }
-
-function setDefault( type, apply ) {
-    
-}
-
-//@TODO Apply past settings/default to all tabs (once loaded)
