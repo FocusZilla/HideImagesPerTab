@@ -1,28 +1,26 @@
 "use strict";
-console.error('background.js');
-debugger;
 
-browser.tabs.onCreated.addListener( tab => {//@TODO Could this be an async closure with easier syntax?
+browser.tabs.onCreated.addListener( async function(tab) {
     // pageActions are hidden by default; let's show it (even while its URL is about:blank, so that the user can choose the button before she types the URL).
-    //@TODO test whether the result of show() is a Promise. If so, document at MDN.
-    // TODO yield
-    browser.pageAction.show(tab.id).then( resultIgnored=> {
-        onTabCreatedOrActivated( tab.id, false );
-    });
+    await browser.pageAction.show(tab.id);
+    await onTabCreatedOrActivated( tab.id, false );
 });
 
 /** When opening a new tab with a URL (or switching to a tab from the past before this add-on was installed).
 */
-browser.tabs.onActivated.addListener( info => onTabCreatedOrActivated(info.tabId, true) );
+browser.tabs.onActivated.addListener( info =>
+    onTabCreatedOrActivated(info.tabId, true)
+);
 
 //@TODO similar for onDefaultButton
+//@TODO onActivated only once - not everytime the user switches to the tab. Hence, keep a global object { tabID => true}.
 async function onTabCreatedOrActivated( tabID, applyCSS ) {
     var tabShowImagesOld= await getSetting( true, tabID );
     var tabWasRestored= tabShowImagesOld!==undefined;
     
     var defaultButton= {
         showImages: await getSetting(false),
-        showVideos: await getSetting(false)
+        showVideos: await getSetting(true)
     };
     var tabButton= tabWasRestored
     ? {
@@ -31,14 +29,59 @@ async function onTabCreatedOrActivated( tabID, applyCSS ) {
     }
     : defaultButton;
     
-    var tabSetting= tabWasRestored
+    var tabSetting= !tabWasRestored
         ? defaultButton
         : undefined;
+        
+    var insertCSSforImages, insertCSSforVideos; //3-state logic (including  undefined)
+    if( applyCSS ) {
+        insertCSSforImages= tabButton.showImages;
+        insertCSSforVideos= tabButton.showVideos;
+    }
     
-    return apply(tab);
+    return apply( defaultButton, tabButton, /*defaultSetting:*/undefined, tabSetting, insertCSSforImages, insertCSSforVideos, tabID );
 }
     
-browser.tabs.onUpdated.addListener( (tabId, changeInfo, tab) => apply(tab) );
+browser.tabs.onUpdated.addListener( async function(tabID, changeInfo, tab) {
+    return apply( /*defaultButton:*/undefined, /*tabButton:*/undefined, /*defaultSetting:*/undefined, /*tabSetting:*/undefined, !await getSetting(true, tabID), !await getSetting(false, tabID), tabID );
+});
+
+/** @param boolean choicePerTab Whether per tab, or for default setting. No need to pass tab ID.
+    @param Tuple Selected choice.
+*/
+async function onButtonClicked( choicePerTab, choice ) {
+    var applyTabButtonAndSetting= choicePerTab || tab.url==='about:blank';
+    var tabID;
+    if( applyTabButtonAndSetting ) {
+        // Can't use browser.tabs.getCurrent();
+        //@TODO how to throw & log?
+        var tabs= await browser.tabs.query( {active: true} );// currentWindow: true
+        if( tabs.length===1) {
+            tabID= tabs[0].id;
+        }
+        else {
+            console.error( "Current tab(s): " +tabs.length);
+        }
+    }
+    
+    var defaultButtonAndSetting= !perTab
+        ? choice
+        : undefined;
+    var tabButtonAndSetting= applyTabButtonAndSetting
+        ? choice
+        : undefined;
+    var insertCSSforImages= applyTabButtonAndSetting
+        ? !choice.showImages
+        : undefined;
+    var insertCSSforVideos= applyTabButtonAndSetting
+        ? !choice.showVideos
+        : undefined;
+    return apply( defaultButtonAndSetting, tabButtonAndSetting, defaultButtonAndSetting, tabButtonAndSetting, insertCSSforImages, insertCSSforVideos, tabID );
+}
+
+/*async function getTabSettings( tabID ) {
+    return new Tuple( await getSetting(true, tabID), await getSetting(false, tabID) );
+}*/
 
 const SUPPORTED_SCHEMES= /(http(s)?|file|ftp):/;
 
@@ -58,7 +101,7 @@ function apply( defaultButton, tabButton, defaultSetting, tabSetting, insertCSSf
             throw "tabButton set to {" +tabButton.showImages+"," +tabButton.showVideos+ "} but tabID is undefined!";
         }
         setButton( tabButton.showImages, tabButton.showVideos, tabID );
-    }
+        }
     if( defaultSetting ) {
         setSetting( /*forImages:*/true,  undefined, defaultSetting.showImages );
         setSetting( /*forImages:*/false, undefined, defaultSetting.showVideos );
@@ -70,6 +113,7 @@ function apply( defaultButton, tabButton, defaultSetting, tabSetting, insertCSSf
         setSetting( /*forImages:*/true,  tabID, tabSetting.showImages );
         setSetting( /*forImages:*/false, tabID, tabSetting.showVideos );
     }
+    return;
     throw "TODO";
     if( tab.url && SUPPORTED_SCHEMES.test(tab.url) ) {
         
@@ -96,27 +140,41 @@ function getSettingName( forImages ) {
     return forImages ? "images" : "videos";
 }
 
+function objectInfo(obj) {
+    var result= obj.constructor.name;
+    for( var field in obj ) {
+        result+= "\n"+ field+ ": "+ obj[field];
+    }
+    return result;
+}
+
 /** @param tabID Of the current tab (if you want setting for the current tab). If undefined, it's for default setting, not for the current tab.
     @return Promise resolving to the actual value (rather than to a key/values object). Resolving to undefined, if the setting wasn't set yet.
 */
-function getSetting( forImages, tabID ) {
+async function getSetting( forImages, tabID ) {
     var settingName= getSettingName(forImages);
     if( tabID!==undefined ) {
-        return browser.sessions.getTabValue( tabID, settingName );
+        var wrapper= await browser.sessions.getTabValue( tabID, settingName );
+        if( wrapper!==undefined && !('value' in wrapper) ) {
+            console.error("WRAPPER " +wrapper+ " doesn't contain .value. Obj: " +objectInfo(wrapper) );
+        }
+        return wrapper!==undefined
+            ? wrapper.value
+            : undefined;
     }
     else {
-        return browser.storage.local.get(settingName).then( retrievedValues =>
-            settingName in retrievedValues
-                ? retrievedValues[settingName]
-                : undefined
-        );
+        var retrievedValues= await browser.storage.local.get(settingName);
+        return settingName in retrievedValues
+            ? retrievedValues[settingName]
+            : undefined;
     }
 }
 
+/** @return Promise */
 function setSetting( forImages, tabID, value ) {
     var settingName= getSettingName(forImages);
     if( tabID!==undefined ) {
-        return browser.sessions.setTabValue( tabID, settingName, value );
+        return browser.sessions.setTabValue( tabID, settingName, {value: value} );
     }
     else {
         var keys= {};
@@ -135,8 +193,9 @@ function setButton( showImages, showVideos, tabID ) {
     var buttonTitle= (showImages ? "Show" : "Hide")+" images. "
         +(showVideos ? "Show" : "Hide")+" plugins/videos. ";
     buttonTitle+= tabID ? "Current tab." : "New tabs.";
-    
     if( tabID!==undefined ) {
+        try {throw new Error();}
+        catch(e) {console.error(e.stack); }
         return Promise.all([
             browser.pageAction.setTitle({
                 title: buttonTitle,
