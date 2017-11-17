@@ -3,7 +3,7 @@
   "manifest_version": 2,
   "name": "Hide Images per Tab",
   "homepage_url": "https://github.com/FocusZilla/HideImagesPerTab",
-  "version": "0.2",
+  "version": "0.3",
 
   "applications": {
     "gecko": {
@@ -12,7 +12,7 @@
     }
   },
   
-"description": "Hide/show images, plugins and videos. Configurable per tab. Temporary user documentation: Similar to https://addons.mozilla.org/en-US/firefox/addon/tab-permissions (which is for old Firefox only).",
+"description": "Hide/show images, plugins and videos. Configurable per tab.",
 
 "browser_action": {
     "browser_style": true,
@@ -42,6 +42,8 @@
 "icons": {
       "48": "buttons/show_images_show_videos.svg",
       "96": "buttons/show_images_show_videos.svg"
-    }
+  },
+  
+"author": "Peter Kehl"
 
 }

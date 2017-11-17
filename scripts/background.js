@@ -1,6 +1,14 @@
 "use strict";
 
+function Tuple(showImages, showVideos) {
+    this.showImages= showImages;
+    this.showVideos= showVideos;
+}
+
 browser.runtime.onInstalled.addListener( async function() {
+    var defaultSetting= new Tuple(false, false);
+    setSetting( /*forImages:*/true,  defaultSetting );
+    setSetting( /*forVideos:*/false, defaultSetting );
     var allTabs= await browser.tabs.query({});
     for( let tab of allTabs ) {
         browser.pageAction.show(tab.id);
@@ -8,8 +16,9 @@ browser.runtime.onInstalled.addListener( async function() {
 });
 
 browser.tabs.onCreated.addListener( async function(tab) {
-    // pageActions are hidden by default; let's show it (even while its URL is about:blank, so that the user can choose the button before she types the URL).
-    await browser.pageAction.show(tab.id);
+    // pageActions are hidden by default (as per https://developer.mozilla.org/en-US/Add-ons/WebExtensions/manifest.json/page_action). Let's show it (even while its URL is about:blank, so that the user can choose the button before she types the URL).
+    debugger;
+    var tmpRes= await browser.pageAction.show(tab.id);
     await onTabCreatedOrActivated( tab.id, false );
 });
 
@@ -36,20 +45,20 @@ async function onTabCreatedOrActivated( tab, applyCSS ) {
         showVideos: await getSetting(true)
     };
     var tabButton= tabWasRestored
-    ? {
+    ? {//@TODO check that this evaluates on tab restore - because it seems not so
         showImages: tabShowImagesOld,
         showVideos: await getSetting(false, tab.id)
     }
     : defaultButton;
     
-    var tabSetting= !tabWasRestored
-        ? defaultButton
-        : undefined;
+    var tabSetting= tabWasRestored
+        ? undefined
+        : defaultButton;
         
     var insertCSSforImages, insertCSSforVideos; //3-state logic (including  undefined)
     if( applyCSS ) {
-        insertCSSforImages= tabButton.showImages;
-        insertCSSforVideos= tabButton.showVideos;
+        insertCSSforImages= !tabButton.showImages;
+        insertCSSforVideos= !tabButton.showVideos;
     }
     
     return apply( defaultButton, tabButton, /*defaultSetting:*/undefined, tabSetting, insertCSSforImages, insertCSSforVideos, tab );
@@ -71,7 +80,7 @@ async function onButtonClicked( choicePerTab, choice ) {
     if( tabs.length===1) {
         tab= tabs[0];
     }
-    var applyTabButtonAndSetting= choicePerTab || tab && tab.url==='about:blank';
+    var applyTabButtonAndSetting= choicePerTab || tab && (tab.url==='' || tab.url==='about:blank');
     
     var defaultButtonAndSetting= !perTab
         ? choice
@@ -112,25 +121,25 @@ function apply( defaultButton, tabButton, defaultSetting, tabSetting, insertCSSf
         setButton( tabButton.showImages, tabButton.showVideos, tab.id );
         }
     if( defaultSetting ) {
-        setSetting( /*forImages:*/true,  undefined, defaultSetting.showImages );
-        setSetting( /*forImages:*/false, undefined, defaultSetting.showVideos );
+        setSetting( /*forImages:*/true,  defaultSetting.showImages );
+        setSetting( /*forImages:*/false, defaultSetting.showVideos );
     }
     if( tabSetting ) {
         if( !tab ) {
             throw "tabSetting set to {" +tabSetting.showImages+"," +tabSetting.showVideos+ "} but tab is undefined!";
         }
-        setSetting( /*forImages:*/true,  tab.id, tabSetting.showImages );
-        setSetting( /*forImages:*/false, tab.id, tabSetting.showVideos );
+        setSetting( /*forImages:*/true,  tabSetting.showImages, tab.id );
+        setSetting( /*forImages:*/false, tabSetting.showVideos, tab.id );
     }
-    if( tab.url && SUPPORTED_SCHEMES.test(tab.url) ) {//unsure about about:blank
-        if( (insertCSSforImages!==undefined || insertCSSforVideos!==undefined) && tab===undefined ) {
+    if( (insertCSSforImages!==undefined || insertCSSforVideos!==undefined) && tab.url && SUPPORTED_SCHEMES.test(tab.url) ) {//unsure about about:blank - it sounds like injecting CSS for it would need a special permission
+        if( tab===undefined ) {
             throw "insertCSSforImages set to " +insertCSSforImages+", insertCSSforImages set to " +insertCSSforImages+ ", but tab is undefined!";
         }
         if( insertCSSforImages!==undefined ) {
-            insertRemoveCSS( '/styles/hide-images.css', insertCSSforImages, tab.id );
+            insertRemoveCSS( /*forImages:*/true, insertCSSforImages, tab.id );
         }
         if( insertCSSforVideos!==undefined ) {
-            insertRemoveCSS( '/styles/hide-videos.css', insertCSSforVideos, tab.id );
+            insertRemoveCSS( /*forVideos:*/true, insertCSSforVideos, tab.id );
         }
     }
 }
@@ -155,12 +164,7 @@ async function getSetting( forImages, tabID ) {
     if( tabID!==undefined ) {
         var wrapper= await browser.sessions.getTabValue( tabID, settingName );
         if( wrapper!==undefined ) {
-            if('value' in wrapper) {
-                return wrapper.value;
-            }
-            else {
-                console.error("WRAPPER " +wrapper+ " doesn't contain .value. Obj: " +objectInfo(wrapper)+ ". This may happen when debugging this extension via 'web-ext run'. If it happened in another situation, report this, please." );
-            }
+            return wrapper.value;
         }
         return undefined;
     }
@@ -172,8 +176,10 @@ async function getSetting( forImages, tabID ) {
     }
 }
 
-/** @return Promise */
-function setSetting( forImages, tabID, value ) {
+/** @param number tabID Optional.
+    @return Promise
+*/
+function setSetting( forImages, value, tabID ) {
     var settingName= getSettingName(forImages);
     if( tabID!==undefined ) {
         return browser.sessions.setTabValue( tabID, settingName, {value: value} );
@@ -224,7 +230,7 @@ function setButton( showImages, showVideos, tabID ) {
 /** Add/remove CSS file.
     @param {string} extFilePath Absolute path within the extension.
 */
-function insertRemoveCSS( forImages, doInsertCSS, tabID ) {
+async function insertRemoveCSS( forImages, doInsertCSS, tabID ) {
     var extFilePath= forImages
         ? '/styles/hide-images.css'
         : '/styles/hide-videos.css';
@@ -232,12 +238,19 @@ function insertRemoveCSS( forImages, doInsertCSS, tabID ) {
         allFrames: true,
         file: extFilePath
     };
+    try{
     if( doInsertCSS ) {
         details.cssOrigin= 'user';//not used by removeCSS()
         details.runAt= 'document_start';
-        return browser.tabs.insertCSS( tabID, details );
+        await/*return*/ browser.tabs.insertCSS( tabID, details );
     }
     else {
-        return browser.tabs.removeCSS( tabID, details );
+        debugger;
+        await/*return*/ browser.tabs.removeCSS( tabID, details );
+    }
+    }
+    catch(e) {
+        var stack= e.stack;
+        debugger;
     }
 }

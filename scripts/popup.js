@@ -1,11 +1,6 @@
 "use strict";
 // See https://developer.mozilla.org/en-US/Add-ons/WebExtensions/Debugging#Debugging_popups
 
-function Tuple(showImages, showVideos) {
-    this.showImages= showImages;
-    this.showVideos= showVideos;
-}
-
 var buttonIDsToTuples= {
     show_images_show_videos: new Tuple(true, true),
     show_images_hide_videos: new Tuple(true, false),
