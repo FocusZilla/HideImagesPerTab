@@ -5,6 +5,10 @@ function Tuple(showImages, showVideos) {
     this.showVideos= showVideos;
 }
 
+Tuple.prototype.toString= function toString() {
+    return `Tuple{${this.showImages}, ${this.showVideos}}`;
+};
+
 browser.runtime.onInstalled.addListener( async function() {
     var defaultSetting= new Tuple(false, false);
     setSetting( /*forImages:*/true,  defaultSetting );
@@ -40,15 +44,15 @@ async function onTabCreatedOrActivated( tab, applyCSS ) {
     var tabShowImagesOld= await getSetting( true, tab.id );
     var tabWasRestored= tabShowImagesOld!==undefined;
     
-    var defaultButton= {
-        showImages: await getSetting(false),
-        showVideos: await getSetting(true)
-    };
+    var defaultButton= new Tuple(
+        await getSetting(false),
+        await getSetting(true)
+    );
     var tabButton= tabWasRestored
-    ? {//@TODO check that this evaluates on tab restore - because it seems not so
-        showImages: tabShowImagesOld,
-        showVideos: await getSetting(false, tab.id)
-    }
+    ? new Tuple(//@TODO check that this evaluates on tab restore - because it seems not so
+        tabShowImagesOld,
+        await getSetting(false, tab.id)
+    )
     : defaultButton;
     
     var tabSetting= tabWasRestored
@@ -107,6 +111,7 @@ const SUPPORTED_SCHEMES= /(http(s)?|file|ftp):/;
     @param tab tabs.Tab Optional; only used (and needed) if tabButton/tabSetting/insertCSSforImages/insertCSSforVideos are set.
 */
 function apply( defaultButton, tabButton, defaultSetting, tabSetting, insertCSSforImages, insertCSSforVideos, tab ) {
+    //console.error( `apply( defaultButton:${defaultButton}, tabButton:${tabButton}, defaultSetting:${defaultSetting}, tabSetting:${tabSetting}, insertCSSforImages:${insertCSSforImages}, insertCSSforVideos:${insertCSSforVideos},tab: ${tab ? 'present' : 'undefined'}` );
     // If you change this, also update ../README.md
     // Ignoring promise results. TODO log/async
     if( defaultButton ) {
@@ -137,7 +142,7 @@ function apply( defaultButton, tabButton, defaultSetting, tabSetting, insertCSSf
             insertRemoveCSS( /*forImages:*/true, insertCSSforImages, tab.id );
         }
         if( insertCSSforVideos!==undefined ) {
-            insertRemoveCSS( /*forVideos:*/true, insertCSSforVideos, tab.id );
+            insertRemoveCSS( /*forImages:*/false, insertCSSforVideos, tab.id );
         }
     }
 }

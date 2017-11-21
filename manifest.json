@@ -3,7 +3,7 @@
   "manifest_version": 2,
   "name": "Hide Images per Tab",
   "homepage_url": "https://github.com/FocusZilla/HideImagesPerTab",
-  "version": "0.3",
+  "version": "0.4",
 
   "applications": {
     "gecko": {
