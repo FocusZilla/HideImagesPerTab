@@ -15,10 +15,10 @@ browser.runtime.onInstalled.addListener( async function() {
     }
 });
 
+// FYI Can't insertCSS() in onCreated: https://developer.mozilla.org/en-US/Add-ons/WebExtensions/API/tabs/onCreated
 browser.tabs.onCreated.addListener( async function(tab) {
-    // pageActions are hidden by default (as per https://developer.mozilla.org/en-US/Add-ons/WebExtensions/manifest.json/page_action). Let's show it (even while its URL is about:blank, so that the user can choose the button before she types the URL).
-    debugger;
-    var tmpRes= await browser.pageAction.show(tab.id);
+    // pageActions are hidden by default (as per https://developer.mozilla.org/en-US/Add-ons/WebExtensions/manifest.json/page_action). Let's show it (even while its URL is about:newtab or about:blank, so that the user can choose the button before she types the URL).
+    await browser.pageAction.show(tab.id);
     await onTabCreatedOrActivated( tab.id, false );
 });
 
@@ -80,7 +80,7 @@ async function onButtonClicked( choicePerTab, choice ) {
     if( tabs.length===1) {
         tab= tabs[0];
     }
-    var applyTabButtonAndSetting= choicePerTab || tab && (tab.url==='' || tab.url==='about:blank');
+    var applyTabButtonAndSetting= choicePerTab || tab && (tab.url==='' || tab.url==='about:newtab' || tab.url==='about:blank');
     
     var defaultButtonAndSetting= !perTab
         ? choice
@@ -97,10 +97,8 @@ async function onButtonClicked( choicePerTab, choice ) {
     return apply( defaultButtonAndSetting, tabButtonAndSetting, defaultButtonAndSetting, tabButtonAndSetting, insertCSSforImages, insertCSSforVideos, tab );
 }
 
-/*async function getTabSettings( tabID ) {
-    return new Tuple( await getSetting(true, tabID), await getSetting(false, tabID) );
-}*/
-
+/** Not including about:blank, because injecting CSS in it may  need a special permission.
+*/
 const SUPPORTED_SCHEMES= /(http(s)?|file|ftp):/;
 
 /** @param defaultButton {showImages: boolean, showVideos: boolean} or undefined (whole) if no change. The new setting for default button (a.k.a. "browser action" button).
@@ -131,7 +129,7 @@ function apply( defaultButton, tabButton, defaultSetting, tabSetting, insertCSSf
         setSetting( /*forImages:*/true,  tabSetting.showImages, tab.id );
         setSetting( /*forImages:*/false, tabSetting.showVideos, tab.id );
     }
-    if( (insertCSSforImages!==undefined || insertCSSforVideos!==undefined) && tab.url && SUPPORTED_SCHEMES.test(tab.url) ) {//unsure about about:blank - it sounds like injecting CSS for it would need a special permission
+    if( (insertCSSforImages!==undefined || insertCSSforVideos!==undefined) && tab.url && SUPPORTED_SCHEMES.test(tab.url) ) {
         if( tab===undefined ) {
             throw "insertCSSforImages set to " +insertCSSforImages+", insertCSSforImages set to " +insertCSSforImages+ ", but tab is undefined!";
         }
@@ -229,8 +227,9 @@ function setButton( showImages, showVideos, tabID ) {
 
 /** Add/remove CSS file.
     @param {string} extFilePath Absolute path within the extension.
+    @return Promise
 */
-async function insertRemoveCSS( forImages, doInsertCSS, tabID ) {
+function insertRemoveCSS( forImages, doInsertCSS, tabID ) {
     var extFilePath= forImages
         ? '/styles/hide-images.css'
         : '/styles/hide-videos.css';
@@ -238,19 +237,12 @@ async function insertRemoveCSS( forImages, doInsertCSS, tabID ) {
         allFrames: true,
         file: extFilePath
     };
-    try{
+    details.cssOrigin= 'user';//not used by removeCSS()
     if( doInsertCSS ) {
-        details.cssOrigin= 'user';//not used by removeCSS()
         details.runAt= 'document_start';
-        await/*return*/ browser.tabs.insertCSS( tabID, details );
+        return browser.tabs.insertCSS( tabID, details );
     }
     else {
-        debugger;
-        await/*return*/ browser.tabs.removeCSS( tabID, details );
-    }
-    }
-    catch(e) {
-        var stack= e.stack;
-        debugger;
+        return browser.tabs.removeCSS( tabID, details );
     }
 }

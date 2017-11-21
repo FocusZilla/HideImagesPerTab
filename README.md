@@ -29,4 +29,6 @@ Beware some LibreOffice versions are sick.
  
 LibreOffice Draw > select all elements > menu File > Export > checkbox 'Selection' > as .svg.
 
-TODO Are thses URLs unique per FF profile? See extension.getUrl(). moz-extension://39c46deb-10a1-40fc-b0d2-a4a603dc6981/popup.html
+TODO Are thees URLs unique per FF profile? See extension.getUrl(). moz-extension://39c46deb-10a1-40fc-b0d2-a4a603dc6981/popup.html
+
+https://github.com/mozilla/web-ext/issues/932
