@@ -3,7 +3,7 @@
   "manifest_version": 2,
   "name": "Hide Images per Tab",
   "homepage_url": "https://github.com/FocusZilla/HideImagesPerTab",
-  "version": "0.4",
+  "version": "0.5.1",
 
   "applications": {
     "gecko": {
@@ -24,7 +24,7 @@
 "page_action": {
   "browser_style": true,
   "default_icon": "buttons/show_images_show_videos.svg",
-  "default_title": "Hide/show images, plugins/videos. Current tab.",
+  "default_title": "Hide/show images, plugins/videos. Current tab.", 
   "default_popup": "popup.html?type=tab"
 },
 

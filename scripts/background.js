@@ -22,6 +22,7 @@ browser.runtime.onInstalled.addListener( async function() {
 // FYI Can't insertCSS() in onCreated: https://developer.mozilla.org/en-US/Add-ons/WebExtensions/API/tabs/onCreated
 browser.tabs.onCreated.addListener( async function(tab) {
     // pageActions are hidden by default (as per https://developer.mozilla.org/en-US/Add-ons/WebExtensions/manifest.json/page_action). Let's show it (even while its URL is about:newtab or about:blank, so that the user can choose the button before she types the URL).
+    console.error( 'pageAction.show' );
     await browser.pageAction.show(tab.id);
     await onTabCreatedOrActivated( tab.id, false );
 });
@@ -69,6 +70,7 @@ async function onTabCreatedOrActivated( tab, applyCSS ) {
 }
     
 browser.tabs.onUpdated.addListener( async function(tabID, changeInfo, tab) {
+    console.error( 'pageAction.show' );
     await browser.pageAction.show(tab.id);
     return apply( /*defaultButton:*/undefined, /*tabButton:*/undefined, /*defaultSetting:*/undefined, /*tabSetting:*/undefined, !await getSetting(true, tabID), !await getSetting(false, tab.id), tab );
 });
@@ -111,7 +113,7 @@ const SUPPORTED_SCHEMES= /(http(s)?|file|ftp):/;
     @param tab tabs.Tab Optional; only used (and needed) if tabButton/tabSetting/insertCSSforImages/insertCSSforVideos are set.
 */
 function apply( defaultButton, tabButton, defaultSetting, tabSetting, insertCSSforImages, insertCSSforVideos, tab ) {
-    //console.error( `apply( defaultButton:${defaultButton}, tabButton:${tabButton}, defaultSetting:${defaultSetting}, tabSetting:${tabSetting}, insertCSSforImages:${insertCSSforImages}, insertCSSforVideos:${insertCSSforVideos},tab: ${tab ? 'present' : 'undefined'}` );
+    console.error( `apply( defaultButton:${defaultButton}, tabButton:${tabButton}, defaultSetting:${defaultSetting}, tabSetting:${tabSetting}, insertCSSforImages:${insertCSSforImages}, insertCSSforVideos:${insertCSSforVideos},tab: ${tab ? 'present' : 'undefined'}` );
     // If you change this, also update ../README.md
     // Ignoring promise results. TODO log/async
     if( defaultButton ) {

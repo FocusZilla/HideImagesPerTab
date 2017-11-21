@@ -1,5 +1,5 @@
 /* https://www.sitepoint.com/five-ways-to-hide-elements-in-css/ */
-img {
+img, svg {
     display: none !important;
 }
 * {
