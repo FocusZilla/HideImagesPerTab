@@ -19,29 +19,24 @@ browser.runtime.onInstalled.addListener( async function() {
     }
 });
 
-// FYI Can't insertCSS() in onCreated: https://developer.mozilla.org/en-US/Add-ons/WebExtensions/API/tabs/onCreated
-browser.tabs.onCreated.addListener( async function(tab) {
-    // pageActions are hidden by default (as per https://developer.mozilla.org/en-US/Add-ons/WebExtensions/manifest.json/page_action). Let's show it (even while its URL is about:newtab or about:blank, so that the user can choose the button before she types the URL).
-    console.error( 'pageAction.show' );
-    await browser.pageAction.show(tab.id);
-    await onTabCreatedOrActivated( tab.id, false );
-});
+// No need to handle browser.tabs.onCreated. FYI Can't insertCSS() in onCreated anyway.
 
 /** Object { tabID => true}. This serves to handle tabs.onActivated only once per tab (on the first such even per tab), rather than everytime the user switches to the tab.
 */
 var onActivatedHandled= {};
 
-/** When opening a new tab with a URL (or switching to a tab from the past before this add-on was installed).
+/** When opening a new tab with a URL (or switching to a tab from the past before this add-on was installed). Only handle the first invocation per tab (since Firefox calls this everytime you switch between tabs).
 */
 browser.tabs.onActivated.addListener( async function(info) {
+    //console.error('onActivated');
     if( !(info.tabId in onActivatedHandled) ) {
         var tab= await browser.tabs.get( info.tabId );
-        onTabCreatedOrActivated(tab, true);
+        onTabActivated(tab, true);
         onActivatedHandled[info.tabId]= true;
     }
 });
 
-async function onTabCreatedOrActivated( tab, applyCSS ) {
+async function onTabActivated( tab, applyCSS ) {
     var tabShowImagesOld= await getSetting( true, tab.id );
     var tabWasRestored= tabShowImagesOld!==undefined;
     
@@ -72,7 +67,11 @@ async function onTabCreatedOrActivated( tab, applyCSS ) {
 browser.tabs.onUpdated.addListener( async function(tabID, changeInfo, tab) {
     console.error( 'pageAction.show' );
     await browser.pageAction.show(tab.id);
-    return apply( /*defaultButton:*/undefined, /*tabButton:*/undefined, /*defaultSetting:*/undefined, /*tabSetting:*/undefined, !await getSetting(true, tabID), !await getSetting(false, tab.id), tab );
+    console.log( `tab.id ${tab.id}`);
+    // For https://bugzilla.mozilla.org/show_bug.cgi?id=1419655:
+    // Without passing tabButton to the following apply(), after starting Firefox 57, when opening the 2nd tab, it incorrectly showed blue/blue image for tab button (based on manifest.json), ignoring current default setting (if other than blue/blue). However, the (invisible) tab setting was populated correctly (based on the current default setting).
+    var tabButton= new Tuple( await getSetting(true, tab.id), await getSetting(false, tab.id) ); // one of the settings was undefined!
+    return apply( /*defaultButton:*/undefined, /*tabButton:*/ tabButton/*@TODO once Mozilla fixes that, change to undefined*/, /*defaultSetting:*/undefined, /*tabSetting:*/undefined, !await getSetting(true, tab.id), !await getSetting(false, tab.id), tab );
 });
 
 /** @param boolean choicePerTab Whether per tab, or for default setting. No need to pass tab ID.

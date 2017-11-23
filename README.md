@@ -22,6 +22,8 @@ manifest
 
 For maintainer: If you change the above, also update scripts/background.js -> function apply().
 
+Some websites disable this add-on. [addons.mozilla.org](addons.mozilla.org) is one of them - hence, don't test hide/show buttons on (the content of) [addons.mozilla.org](addons.mozilla.org).
+
 # Exporting button images
 Beware some LibreOffice versions are sick.
 1:5.3.1-0ubuntu2 on Ubuntu 17.04 exported to SVG well, but 1:5.4.1-0ubuntu1 on Unbuntu 17.10 didn't.
