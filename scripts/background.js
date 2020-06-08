@@ -28,7 +28,6 @@ var onActivatedHandled= {};
 /** When opening a new tab with a URL (or switching to a tab from the past before this add-on was installed). Only handle the first invocation per tab (since Firefox calls this everytime you switch between tabs).
 */
 browser.tabs.onActivated.addListener( async function(info) {
-    //console.error('onActivated');
     if( !(info.tabId in onActivatedHandled) ) {
         var tab= await browser.tabs.get( info.tabId );
         onTabActivated(tab, true);
@@ -65,7 +64,6 @@ async function onTabActivated( tab, applyCSS ) {
 }
     
 browser.tabs.onUpdated.addListener( async function(tabID, changeInfo, tab) {
-    console.error( 'pageAction.show' );
     await browser.pageAction.show(tab.id);
     console.log( `tab.id ${tab.id}`);
     // For https://bugzilla.mozilla.org/show_bug.cgi?id=1419655:
@@ -112,7 +110,6 @@ const SUPPORTED_SCHEMES= /(http(s)?|file|ftp):/;
     @param tab tabs.Tab Optional; only used (and needed) if tabButton/tabSetting/insertCSSforImages/insertCSSforVideos are set.
 */
 function apply( defaultButton, tabButton, defaultSetting, tabSetting, insertCSSforImages, insertCSSforVideos, tab ) {
-    console.error( `apply( defaultButton:${defaultButton}, tabButton:${tabButton}, defaultSetting:${defaultSetting}, tabSetting:${tabSetting}, insertCSSforImages:${insertCSSforImages}, insertCSSforVideos:${insertCSSforVideos},tab: ${tab ? 'present' : 'undefined'}` );
     // If you change this, also update ../README.md
     // Ignoring promise results. TODO log/async
     if( defaultButton ) {
